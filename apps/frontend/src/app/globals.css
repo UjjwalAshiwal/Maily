@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One subtle motion vocabulary: dialog entrance + view fade only. */
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dialog-enter {
+  animation: dialog-in 160ms ease-out;
+}
+
+@keyframes view-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.view-enter {
+  animation: view-in 140ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-enter, .view-enter { animation: none; }
+}
