@@ -10,7 +10,7 @@ import { env } from "../config/env.js";
 //   rl:sender:{senderId}:hour:{window}  -> sends consumed in a UTC hour window
 // Window format is UTC YYYYMMDDHH, e.g. 2026092915.
 
-const client = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null, lazyConnect: true });
+const client = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
 client.on("error", () => {});
 
 export const nextSendKey = (senderId: string) => `rl:sender:${senderId}:next`;

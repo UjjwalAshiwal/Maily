@@ -66,7 +66,7 @@ export const loginWithPassword = async (input: { email: string; password: string
 };
 
 // OAuth state (CSRF protection) lives in Redis, never in process memory.
-const stateClient = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, lazyConnect: true });
+const stateClient = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 3 });
 stateClient.on("error", () => {});
 
 export const buildGoogleAuthUrl = (state: string): string => {

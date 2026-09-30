@@ -21,7 +21,7 @@ interface SlackOAuthRecord {
   codeVerifier: string;
 }
 
-const oauthClient = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, lazyConnect: true });
+const oauthClient = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 3 });
 oauthClient.on("error", () => {});
 const oauthKey = (state: string) => `slack:oauth:${state}`;
 
