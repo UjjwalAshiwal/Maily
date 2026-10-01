@@ -22,30 +22,27 @@ export const googleHandler = async (_req: Request, res: Response, next: NextFunc
   }
 };
 
-const oauthFailed = (res: Response, reason?: string) =>
-  res.redirect(
-    `${env.FRONTEND_URL.replace(/\/$/, "")}/login?error=oauth_failed${reason ? `&reason=${encodeURIComponent(reason)}` : ""}`
-  );
+const oauthFailed = (res: Response) =>
+  res.redirect(`${env.FRONTEND_URL.replace(/\/$/, "")}/login?error=oauth_failed`);
 
 export const googleCallbackHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { code, state, error: googleError } = req.query as { code?: string; state?: string; error?: string };
     if (googleError) {
       logger.warn({ googleError }, "oauth callback refused by google");
-      return oauthFailed(res, `google_${googleError}`);
+      return oauthFailed(res);
     }
     if (!code || !state || !(await consumeOAuthState(state))) {
       logger.warn("oauth callback with missing/invalid state");
-      return oauthFailed(res, "bad_state");
+      return oauthFailed(res);
     }
     const user = await findOrCreateUser(await exchangeCodeForProfile(code));
     // Token goes to our own frontend via query param (documented trade-off);
     // never log it, never return provider tokens.
     res.redirect(`${env.FRONTEND_URL}/auth/callback?token=${signToken(user.id)}`);
   } catch (e) {
-    const reason = e instanceof Error ? e.message.replace(/[^a-z0-9_ ]/gi, "").slice(0, 60) : "callback_failed";
     logger.error({ err: e }, "oauth callback failed");
-    if (!res.headersSent) return oauthFailed(res, reason);
+    if (!res.headersSent) return oauthFailed(res);
     next(e);
   }
 };

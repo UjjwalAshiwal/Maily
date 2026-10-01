@@ -4,6 +4,7 @@ import cors from "cors";
 import { env } from "./config/env.js";
 import { logger } from "./utils/logger.js";
 import { healthRouter } from "./routes/health.routes.js";
+import { readyRouter } from "./routes/ready.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { emailRouter } from "./routes/email.routes.js";
 import { senderRouter } from "./routes/sender.routes.js";
@@ -19,6 +20,7 @@ app.use(cors({ origin: allowedOrigins.length <= 1 ? env.FRONTEND_URL : allowedOr
 app.use(express.json({ limit: "256kb" }));
 
 app.use("/health", healthRouter);
+app.use("/ready", readyRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/emails", emailRouter);
 app.use("/api/senders", senderRouter);

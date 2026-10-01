@@ -39,3 +39,8 @@ export const sendEmail = async (input: SendEmailInput): Promise<SendEmailResult>
   });
   return { messageId: info.messageId, previewUrl: nodemailer.getTestMessageUrl(info) };
 };
+
+// Loud dependency probe for /ready: verifies SMTP login without sending.
+export const verifySmtp = async (): Promise<void> => {
+  await getTransporter().verify();
+};
