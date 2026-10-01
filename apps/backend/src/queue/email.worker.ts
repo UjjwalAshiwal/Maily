@@ -10,10 +10,7 @@ import { isProcessingRecovery } from "./processing-recovery.js";
 import { createQueueConnection } from "./connection.js";
 import { EMAIL_QUEUE_NAME } from "./email.queue.js";
 
-// Phase 4: SCHEDULED emails first reserve a Redis send slot. Not sendable
-// yet -> the SAME job is moved to a future delayed execution (no duplicate
-// jobs, no failure recorded, Email stays SCHEDULED). Only a sendable email
-// becomes PROCESSING. SMTP behavior below is unchanged from Phase 3C.
+// Not sendable yet -> the same job moves to a delayed run, Email stays SCHEDULED.
 export const emailWorker = new Worker(
   EMAIL_QUEUE_NAME,
   async (job) => {
@@ -34,10 +31,8 @@ export const emailWorker = new Worker(
       logger.info({ emailId, jobId: job.id }, "email already failed, skipping");
       return;
     }
-    // Crash recovery: PROCESSING with no terminal write means a previous
-    // attempt died mid-send; a BullMQ retry/stall-recovery of the same job
-    // must reprocess (falls through to the stored-slot + send flow below).
-    // Anything else non-SCHEDULED keeps the old skip.
+    // A PROCESSING row with no terminal write means the previous attempt died
+    // mid-send; retries/stall-recovery must reprocess it.
     if (email.status === "PROCESSING") {
       if (!isProcessingRecovery(job)) {
         logger.info({ emailId, jobId: job.id, status: email.status }, "email not scheduled, skipping");
@@ -52,11 +47,7 @@ export const emailWorker = new Worker(
       return;
     }
 
-    // Reserve once per email, then wait without re-consuming. Re-reserving on
-    // every wake never converges (each wake allocates max(now,next)+delay, so
-    // the slot is always in the future) and pushes the shared pointer forward.
-    // The stored slot survives retries: a retry reuses it instead of taking
-    // a new one. Quota was consumed at reservation time.
+    // Each email reserves one slot and reuses it across retries.
     let slotMs = await getEmailSlot(email.id);
     if (slotMs === null) {
       const decision = await reserveSendSlot(email.senderId, email.scheduledAt.getTime());
@@ -89,9 +80,7 @@ export const emailWorker = new Worker(
           },
           "rate limit reached, rescheduled"
         );
-        // The job is now delayed, not complete: DelayedError tells BullMQ to
-        // skip the completed/failed transition (no retry consumed, no failure).
-        // A bare return here breaks at runtime ("not in the active state").
+        // DelayedError skips the completed/failed transition without consuming a retry.
         throw new DelayedError();
       }
       slotMs = decision.slotMs;
@@ -117,7 +106,7 @@ export const emailWorker = new Worker(
       throw new DelayedError();
     }
 
-    // Atomic claim: only the worker that flips SCHEDULED->PROCESSING sends.
+    // Only the worker that flips SCHEDULED->PROCESSING sends.
     const claimed = await prisma.email.updateMany({
       where: { id: emailId, status: "SCHEDULED" },
       data: { status: "PROCESSING", attempts: { increment: 1 } },
@@ -129,7 +118,7 @@ export const emailWorker = new Worker(
     if (email.status === "PROCESSING") {
       await prisma.email.update({ where: { id: emailId }, data: { attempts: { increment: 1 } } }).catch(() => {});
     }
-    // Best-effort index sync. Never throws: ES failure must not resend email.
+    // Index sync never throws: ES failure must not resend email.
     await syncEmailToIndex(emailId);
 
     try {
@@ -147,7 +136,7 @@ export const emailWorker = new Worker(
       logger.info({ emailId, recipient: email.recipient, jobId: job.id, previewUrl }, "email sent");
     } catch (err: any) {
       const msg: string = err?.message ?? String(err);
-      // ponytail: fail fast on config/auth errors, retry only on transient SMTP
+      // Config/auth errors never succeed on retry; transient SMTP does.
       if (/auth|credential|certificate|ENCRYPTION_KEY|configuration/i.test(msg))
         throw new UnrecoverableError(msg);
       const maxAttempts = job.opts.attempts ?? 1;

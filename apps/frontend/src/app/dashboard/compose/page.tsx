@@ -1,14 +1,8 @@
 "use client";
 
-// Full-page compose (Figma): From · To chips + list upload · Subject ·
-// per-compose Delay / Hourly pacing · body · Send / Send Later.
-// ?edit=<id> turns the same page into the scheduled-email editor (PATCH).
-//
-// Pacing is computed client-side into each email's scheduledAt (start +
-// i*delay, spilling hours past the hourly cap into the next hour), so the
-// values visibly determine the schedule. The server's own Redis rate
-// limiting stays in place as the enforceable backstop. No per-request
-// backend controls were added.
+// Full-page compose (?edit=<id> becomes the scheduled-email editor).
+// Delay/hourly inputs are computed into each recipient's scheduledAt;
+// the server's Redis rate limiting stays the enforceable backstop.
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useRef, useState } from "react";

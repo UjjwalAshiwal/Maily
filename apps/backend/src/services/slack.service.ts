@@ -12,10 +12,7 @@ import {
   postSlackWebhook,
 } from "../integrations/slack.js";
 
-// OAuth state: unpredictable, expiring, bound to the user, single-use.
-// The record also carries the PKCE verifier as one JSON value with the same
-// 10-minute TTL. Only the random state travels in the URL; the userId and
-// the verifier stay server-side and are never logged or returned.
+// OAuth state + PKCE verifier, server-side only, 10-min TTL, single-use.
 interface SlackOAuthRecord {
   userId: string;
   codeVerifier: string;
@@ -104,8 +101,7 @@ export interface RateLimitNotifyInput {
   jobId?: string;
 }
 
-// Best-effort by contract: NEVER throws. Slack failure must not fail, delay,
-// or resend the email job — the caller reschedules unconditionally.
+// Best-effort: never throws, so Slack failure can't fail or delay the email job.
 export const notifyHourlyLimit = async (input: RateLimitNotifyInput): Promise<void> => {
   try {
     const sender = await prisma.sender.findUnique({ where: { id: input.senderId } });

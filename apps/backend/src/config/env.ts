@@ -40,6 +40,6 @@ export const env = {
   SLACK_CLIENT_ID: process.env.SLACK_CLIENT_ID ?? "",
   SLACK_REDIRECT_URI: process.env.SLACK_REDIRECT_URI ?? "http://localhost:4000/api/slack/callback",
   ENCRYPTION_KEY: encryptionKey,
-  // ponytail: closed by default, open only when explicitly enabled
+  // Closed by default; open only when explicitly enabled.
   BULL_BOARD_ENABLED: process.env.BULL_BOARD_ENABLED === "true",
 };

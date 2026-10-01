@@ -18,11 +18,10 @@ function CallbackInner() {
       setError("Sign-in did not return a token.");
       return;
     }
-    // ponytail: token in URL only once, strip before any logging/history
+    // Token arrives in the URL once; strip it before history/logs keep it.
     setToken(token);
     window.history.replaceState(null, "", "/auth/callback");
-    // Backstop: never spin forever. The API layer already times out, but
-    // this guarantees the spinner always resolves to dashboard or error.
+    // Never spin forever: the API layer already times out.
     const safety = setTimeout(() => {
       setError((prev) => prev ?? "Sign-in is taking too long. Please try again.");
     }, 30000);

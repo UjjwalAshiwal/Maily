@@ -23,7 +23,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/emails", emailRouter);
 app.use("/api/senders", senderRouter);
 app.use("/api/slack", slackRouter);
-// ponytail: lazy import so tests/transients never spin Queue+Worker conns
+// Lazy import so tests never open Queue+Worker connections.
 if (env.BULL_BOARD_ENABLED) app.use("/admin/queues", bullBoardRouter);
 else app.use("/admin/queues", (_req, res) => res.status(404).json({ error: "not found" }));
 

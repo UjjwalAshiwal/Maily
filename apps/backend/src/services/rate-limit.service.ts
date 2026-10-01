@@ -2,14 +2,8 @@ import { Redis } from "ioredis";
 import { env } from "../config/env.js";
 import { logger } from "../utils/logger.js";
 
-// Redis is the shared source of truth for rate-limit coordination.
-// PostgreSQL stays the source of truth for Email state; BullMQ stays the
-// source of truth for job execution. No in-memory counters, no new tables.
-//
-// Key design (all sender-scoped, so senders never consume each other's quota):
-//   rl:sender:{senderId}:next           -> next available send slot (ms epoch)
-//   rl:sender:{senderId}:hour:{window}  -> sends consumed in a UTC hour window
-// Window format is UTC YYYYMMDDHH, e.g. 2026092915.
+// Per-sender pacing in Redis: slot pointer + hourly counter (UTC YYYYMMDDHH).
+// Keys: rl:sender:{id}:next, rl:sender:{id}:hour:{window}, rl:email:{id}:slot.
 
 const client = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 3 });
 client.on("error", (err) => logger.error({ err }, "rate-limit redis error"));
@@ -17,7 +11,6 @@ client.on("error", (err) => logger.error({ err }, "rate-limit redis error"));
 export const nextSendKey = (senderId: string) => `rl:sender:${senderId}:next`;
 export const hourCounterKey = (senderId: string, window: string) =>
   `rl:sender:${senderId}:hour:${window}`;
-// One stored reservation per email: reserve once, wait without re-consuming.
 export const emailSlotKey = (emailId: string) => `rl:email:${emailId}:slot`;
 const EMAIL_SLOT_TTL_SECONDS = 7 * 24 * 3600;
 
@@ -48,10 +41,7 @@ export const nextHourStartMs = (ms: number): number => {
   return d.getTime() + 3_600_000;
 };
 
-// Atomically assign this sender's next send slot and advance the pointer.
-// Concurrent workers each get a distinct slot >= max(now, requested).
-// Inputs: KEYS[1] next-send key; ARGV nowMs, requestedMs, minDelayMs.
-// Output: assigned slot (ms epoch, string).
+// Next send slot per sender; concurrent workers each get a distinct slot.
 const SLOT_SCRIPT = `
 local nextAvail = tonumber(redis.call('GET', KEYS[1]) or '0')
 local slot = math.max(tonumber(ARGV[1]), tonumber(ARGV[2]), nextAvail)
@@ -59,10 +49,7 @@ redis.call('SET', KEYS[1], tostring(slot + tonumber(ARGV[3])))
 return tostring(slot)
 `;
 
-// Atomically consume one unit of hourly quota iff quota remains.
-// Inputs: KEYS[1] counter key; ARGV maxAllowed, ttlSeconds.
-// Output: {allowed 1/0, current count}. TTL is set on first increment so
-// old windows expire instead of accumulating forever.
+// Hourly quota: consume one unit only if quota remains.
 const QUOTA_SCRIPT = `
 local count = tonumber(redis.call('GET', KEYS[1]) or '0')
 if count < tonumber(ARGV[1]) then
@@ -82,12 +69,8 @@ export type ReserveResult =
   | { allowed: true; slotMs: number; window: string }
   | { allowed: false; reason: "HOURLY_LIMIT"; retryAtMs: number; window: string };
 
-// Reserve a send slot for senderId. Quota is only consumed when a slot is
-// actually allocated (never for a job that is merely inspected). Ordering is
-// best-effort: slots go to workers in Redis arrival order.
-// Reserve a send slot for senderId. Quota is checked BEFORE the slot
-// pointer advances, so a denied reservation never pushes `next` forward
-// (the old order starved senders after sustained over-limit).
+// Quota is checked before the slot pointer advances, so a denial never
+// pushes the sender's schedule forward. Ordering is best-effort.
 export const reserveSendSlot = async (
   senderId: string,
   requestedTimeMs: number = Date.now()

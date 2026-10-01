@@ -1,25 +1,15 @@
 import { createHash, randomBytes } from "node:crypto";
 import { env } from "../config/env.js";
 
-// Provider boundary: plain fetch, no Slack SDK. Never logs secrets.
-// Credential model: the app requests the `incoming-webhook` scope, so the
-// usable credential is the webhook URL — that is what gets stored
-// (encrypted) in SlackConnection.accessToken. No channel picker needed.
-
-// PKCE (RFC 7636, S256): required for the localhost ("desktop") redirect.
-// The verifier lives only in server-side Redis state; the URL carries just
-// the challenge. Neither is ever logged.
+// Plain fetch, no Slack SDK. Stored credential is the webhook URL (encrypted).
+// PKCE S256: verifier stays in server Redis, only the challenge travels in the URL.
 export const newCodeVerifier = (): string => randomBytes(32).toString("base64url");
 
 export const codeChallengeFor = (verifier: string): string =>
   createHash("sha256").update(verifier, "utf8").digest("base64url");
 
 export const buildSlackAuthUrl = (state: string, codeChallenge: string): string => {
-  // incoming-webhook is a BOT-only scope (Slack scope catalog: Bot, Legacy
-  // Bot — no user-scope equivalent exists), so it must stay in `scope=`.
-  // Bot scopes require a public HTTPS redirect; localhost is a "desktop
-  // redirect" and is rejected. Local dev therefore tunnels via https
-  // (see SLACK_REDIRECT_URI) instead of weakening anything.
+    // Bot scopes need a public HTTPS redirect; local dev tunnels over https.
   const params = new URLSearchParams({
     client_id: env.SLACK_CLIENT_ID,
     scope: "incoming-webhook",
@@ -44,8 +34,7 @@ export const exchangeSlackCode = async (
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     signal: AbortSignal.timeout(15000),
-    // PKCE exchange: the verifier proves this client made the authorize
-    // request, so no client_secret is sent here.
+    // PKCE proves this client made the authorize request; no secret is sent.
     body: new URLSearchParams({
       code,
       client_id: env.SLACK_CLIENT_ID,

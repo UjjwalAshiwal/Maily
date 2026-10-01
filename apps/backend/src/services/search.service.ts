@@ -128,8 +128,7 @@ export const searchEmails = async (input: {
       typeof res.hits.total === "number" ? res.hits.total : (res.hits.total?.value ?? hits.length);
     return toSearchResponse(hits, total);
   } catch (err) {
-    // ponytail: ES down (e.g. Render with no managed ES) falls back to Postgres
-    // ILIKE instead of 500ing search.
+    // ES down (e.g. no managed ES on Render): fall back to Postgres ILIKE.
     logger.error({ err }, "elasticsearch search failed, falling back to postgres");
     const where: any = {
       ...(status ? { status } : {}),

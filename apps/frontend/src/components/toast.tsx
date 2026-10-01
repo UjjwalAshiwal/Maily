@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-// ponytail: tiny event-based toasts, no dependency.
+// Tiny event-based toasts, no dependency.
 export const toast = (message: string) =>
   window.dispatchEvent(new CustomEvent("maily-toast", { detail: message }));
 

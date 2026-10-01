@@ -1,8 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { env } from "../config/env.js";
 
-// AES-256-GCM for stored Slack webhook URLs. Key is a 32-byte hex string
-// (generate with: openssl rand -hex 32). Never logs plaintext or keys.
+// AES-256-GCM for stored Slack webhook URLs (key: openssl rand -hex 32).
 const key = (): Buffer => {
   const raw = Buffer.from(env.ENCRYPTION_KEY, "hex");
   if (raw.length !== 32) throw new Error("ENCRYPTION_KEY must be 32 bytes hex");

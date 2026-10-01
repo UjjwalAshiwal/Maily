@@ -4,8 +4,7 @@ import type { EmailItem, EmailListResponse, SchedulePayload, Sender, User } from
 
 export const TOKEN_KEY = "reachinbox_token";
 
-// Same-origin by default: next.config.mjs rewrites /api/* to the backend.
-// ponytail: always relative, one backend. No absolute URLs, no CORS split.
+// Same-origin: Next rewrites /api/* to the backend, so all calls stay relative.
 export const apiBase = () => "";
 
 export const googleLoginUrl = () => `/api/auth/google`;

@@ -55,7 +55,7 @@ export const scheduleEmail = async (input: unknown, authUserId: string) => {
       },
     });
   } catch (e: any) {
-    // ponytail: client-supplied key replay returns the original row
+    // A replayed client-supplied key returns the original row.
     if (e?.code === "P2002" && data.idempotencyKey) {
       const existing = await prisma.email.findUnique({ where: { idempotencyKey: data.idempotencyKey } });
       if (existing) return { emailId: existing.id, jobId: existing.bullJobId ?? "", status: existing.status };
@@ -231,7 +231,7 @@ export const updateScheduledEmail = async (authUserId: string, emailId: string, 
   }
 };
 
-// --- Phase 9 read models (PostgreSQL-authoritative, for dashboard lists) ---
+// Read models (PostgreSQL-authoritative, for dashboard lists).
 
 const MAX_LIST_LIMIT = 100;
 const DEFAULT_LIST_LIMIT = 20;

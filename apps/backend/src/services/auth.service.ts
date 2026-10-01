@@ -83,7 +83,7 @@ const storeOAuthState = async (state: string): Promise<void> => {
 export const consumeOAuthState = async (state: string): Promise<boolean> => {
   if (!/^[A-Za-z0-9-]{8,128}$/.test(state)) return false;
   const key = `oauth:state:${state}`;
-  // ponytail: atomic GETDEL, single-use even under double-callback race
+  // Atomic GETDEL: single-use even under a double-callback race.
   const found = await stateClient.getdel(key);
   return found !== null;
 };
@@ -134,7 +134,7 @@ export const exchangeCodeForProfile = async (code: string): Promise<GoogleProfil
 export const findOrCreateUser = async (profile: GoogleProfile) => {
   const byGoogleId = await prisma.user.findUnique({ where: { googleId: profile.sub } });
   if (byGoogleId) {
-    // ponytail: never clobber user-edited name/avatar with provider data
+    // Never overwrite a user-edited name/avatar with provider data.
     return byGoogleId;
   }
   // No Google link yet. A Google-verified email is a safe identity match,
