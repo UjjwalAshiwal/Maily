@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "prisma generate && tsc",
-    "start": "prisma migrate deploy && node dist/server.js",
+    "start": "(prisma migrate deploy || echo 'MIGRATE_DEPLOY_FAILED_CONTINUING_WITH_EXISTING_SCHEMA') && node dist/server.js",
     "test": "tsx --test --test-force-exit \"src/**/*.test.ts\"",
     "search:index": "tsx src/scripts/search-index.ts"
   },
