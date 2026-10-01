@@ -23,6 +23,9 @@ const getTransporter = (): Transporter => {
     host: env.ETHEREAL_HOST,
     port: env.ETHEREAL_PORT,
     auth: { user: env.ETHEREAL_USER, pass: env.ETHEREAL_PASSWORD },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
   });
   return transporter;
 };
