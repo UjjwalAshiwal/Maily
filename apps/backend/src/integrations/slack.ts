@@ -43,6 +43,7 @@ export const exchangeSlackCode = async (
   const res = await fetch("https://slack.com/api/oauth.v2.access", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    signal: AbortSignal.timeout(15000),
     // PKCE exchange: the verifier proves this client made the authorize
     // request, so no client_secret is sent here.
     body: new URLSearchParams({
@@ -71,6 +72,7 @@ export const postSlackWebhook = async (webhookUrl: string, text: string): Promis
   const res = await fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(15000),
     body: JSON.stringify({ text }),
   });
   if (!res.ok || (await res.text()).trim() !== "ok")

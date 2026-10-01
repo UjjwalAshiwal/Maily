@@ -39,6 +39,7 @@ model Sender {
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   emails Email[]
 
+  @@unique([userId, email])
   @@index([userId])
 }
 

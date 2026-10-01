@@ -5,12 +5,6 @@ import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 import { logger } from "../utils/logger.js";
 
-// Stateless JWT auth: the token carries only the server-issued user id
-// (sub). No roles/permissions inside — ownership is always resolved from
-// PostgreSQL per request. Logout is client-side discard (documented trade-off:
-// a JWT stays valid until its 7-day expiry; no revocation list by design).
-if (!process.env.JWT_SECRET) logger.warn("JWT_SECRET not set, using insecure dev default");
-
 export const signToken = (userId: string): string =>
   jwt.sign({ sub: userId }, env.JWT_SECRET, { expiresIn: "7d" });
 
@@ -67,7 +61,7 @@ export const loginWithPassword = async (input: { email: string; password: string
 
 // OAuth state (CSRF protection) lives in Redis, never in process memory.
 const stateClient = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 3 });
-stateClient.on("error", () => {});
+stateClient.on("error", (err) => logger.error({ err }, "oauth redis error"));
 
 export const buildGoogleAuthUrl = (state: string): string => {
   const params = new URLSearchParams({
@@ -87,11 +81,11 @@ const storeOAuthState = async (state: string): Promise<void> => {
 };
 
 export const consumeOAuthState = async (state: string): Promise<boolean> => {
+  if (!/^[A-Za-z0-9-]{8,128}$/.test(state)) return false;
   const key = `oauth:state:${state}`;
-  const found = await stateClient.get(key);
-  if (!found) return false;
-  await stateClient.del(key);
-  return true;
+  // ponytail: atomic GETDEL, single-use even under double-callback race
+  const found = await stateClient.getdel(key);
+  return found !== null;
 };
 
 export const newOAuthState = async (): Promise<string> => {
@@ -113,6 +107,7 @@ export const exchangeCodeForProfile = async (code: string): Promise<GoogleProfil
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    signal: AbortSignal.timeout(15000),
     body: new URLSearchParams({
       code,
       client_id: env.GOOGLE_CLIENT_ID,
@@ -127,6 +122,7 @@ export const exchangeCodeForProfile = async (code: string): Promise<GoogleProfil
 
   const meRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
     headers: { Authorization: `Bearer ${access_token}` },
+    signal: AbortSignal.timeout(15000),
   });
   if (!meRes.ok) throw new Error("google profile fetch failed");
   const profile = (await meRes.json()) as GoogleProfile;
@@ -138,10 +134,7 @@ export const exchangeCodeForProfile = async (code: string): Promise<GoogleProfil
 export const findOrCreateUser = async (profile: GoogleProfile) => {
   const byGoogleId = await prisma.user.findUnique({ where: { googleId: profile.sub } });
   if (byGoogleId) {
-    const name = profile.name ?? byGoogleId.name;
-    const avatarUrl = profile.picture ?? byGoogleId.avatarUrl;
-    if (name !== byGoogleId.name || avatarUrl !== byGoogleId.avatarUrl)
-      return prisma.user.update({ where: { id: byGoogleId.id }, data: { name, avatarUrl } });
+    // ponytail: never clobber user-edited name/avatar with provider data
     return byGoogleId;
   }
   // No Google link yet. A Google-verified email is a safe identity match,
@@ -150,11 +143,7 @@ export const findOrCreateUser = async (profile: GoogleProfile) => {
   if (byEmail)
     return prisma.user.update({
       where: { id: byEmail.id },
-      data: {
-        googleId: profile.sub,
-        name: profile.name ?? byEmail.name,
-        avatarUrl: profile.picture ?? byEmail.avatarUrl,
-      },
+      data: { googleId: profile.sub },
     });
   return prisma.user.create({
     data: {

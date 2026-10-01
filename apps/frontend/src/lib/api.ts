@@ -1,5 +1,3 @@
-"use client";
-
 // Centralized typed API client. Every backend call goes through here —
 // no raw fetch calls scattered across components.
 import type { EmailItem, EmailListResponse, SchedulePayload, Sender, User } from "../types/index";
@@ -7,12 +5,10 @@ import type { EmailItem, EmailListResponse, SchedulePayload, Sender, User } from
 export const TOKEN_KEY = "reachinbox_token";
 
 // Same-origin by default: next.config.mjs rewrites /api/* to the backend.
-// Honors NEXT_PUBLIC_API (the existing rewrite convention) or
-// NEXT_PUBLIC_API_URL when the backend lives on another origin.
-export const apiBase = () =>
-  process.env.NEXT_PUBLIC_API_URL ?? process.env.NEXT_PUBLIC_API ?? "";
+// ponytail: always relative, one backend. No absolute URLs, no CORS split.
+export const apiBase = () => "";
 
-export const googleLoginUrl = () => `${apiBase()}/api/auth/google`;
+export const googleLoginUrl = () => `/api/auth/google`;
 
 export const getToken = () =>
   typeof window === "undefined" ? null : window.localStorage.getItem(TOKEN_KEY);
@@ -32,7 +28,10 @@ export class ApiError extends Error {
 const parseError = async (res: Response): Promise<string> => {
   try {
     const body = await res.json();
-    if (typeof body?.error === "string" && body.error) return body.error;
+    for (const k of ["error", "message", "detail"] as const) {
+      if (typeof body?.[k] === "string" && body[k]) return body[k];
+    }
+    if (Array.isArray(body?.errors) && typeof body.errors[0] === "string") return body.errors[0];
   } catch {
     /* fall through to status text */
   }
@@ -61,7 +60,12 @@ export const apiFetch = async <T>(path: string, init?: RequestInit): Promise<T> 
   // 204 / empty bodies (logout-style) resolve as undefined.
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  return (text ? JSON.parse(text) : undefined) as T;
+  if (!text) return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError(res.status, "unexpected response from server");
+  }
 };
 
 export const fetchMe = () => apiFetch<{ user: User }>("/api/auth/me");

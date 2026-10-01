@@ -42,9 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(null);
     } catch (e) {
       // Invalid/expired token: drop it so the user lands on login cleanly.
-      if (e instanceof ApiError && e.status === 401) clearToken();
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) clearToken();
+      else if (!(e instanceof ApiError)) clearToken();
       setUser(null);
-      setError(e instanceof Error ? e.message : "failed to load user");
+      const msg = e instanceof Error ? e.message : "failed to load user";
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setLoading(false);
     }

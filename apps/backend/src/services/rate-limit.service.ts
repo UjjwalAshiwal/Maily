@@ -1,5 +1,6 @@
 import { Redis } from "ioredis";
 import { env } from "../config/env.js";
+import { logger } from "../utils/logger.js";
 
 // Redis is the shared source of truth for rate-limit coordination.
 // PostgreSQL stays the source of truth for Email state; BullMQ stays the
@@ -10,8 +11,8 @@ import { env } from "../config/env.js";
 //   rl:sender:{senderId}:hour:{window}  -> sends consumed in a UTC hour window
 // Window format is UTC YYYYMMDDHH, e.g. 2026092915.
 
-const client = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
-client.on("error", () => {});
+const client = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 3 });
+client.on("error", (err) => logger.error({ err }, "rate-limit redis error"));
 
 export const nextSendKey = (senderId: string) => `rl:sender:${senderId}:next`;
 export const hourCounterKey = (senderId: string, window: string) =>
@@ -84,6 +85,9 @@ export type ReserveResult =
 // Reserve a send slot for senderId. Quota is only consumed when a slot is
 // actually allocated (never for a job that is merely inspected). Ordering is
 // best-effort: slots go to workers in Redis arrival order.
+// Reserve a send slot for senderId. Quota is checked BEFORE the slot
+// pointer advances, so a denied reservation never pushes `next` forward
+// (the old order starved senders after sustained over-limit).
 export const reserveSendSlot = async (
   senderId: string,
   requestedTimeMs: number = Date.now()
@@ -93,11 +97,15 @@ export const reserveSendSlot = async (
     throw new Error("MAX_EMAILS_PER_HOUR must be >= 1 (0 would reschedule forever)");
 
   const now = Date.now();
+  const window = hourWindowFor(Math.max(now, requestedTimeMs));
+  const used = Number((await client.get(hourCounterKey(senderId, window))) ?? "0");
+  if (used >= env.MAX_EMAILS_PER_HOUR)
+    return { allowed: false, reason: "HOURLY_LIMIT", retryAtMs: nextHourStartMs(now), window };
+
   const slotMs = Number(
     await client.eval(SLOT_SCRIPT, 1, nextSendKey(senderId), String(now), String(requestedTimeMs), String(minDelayMs))
   );
 
-  const window = hourWindowFor(slotMs);
   const [allowed] = (await client.eval(
     QUOTA_SCRIPT,
     1,
@@ -107,5 +115,5 @@ export const reserveSendSlot = async (
   )) as [number, number];
 
   if (allowed === 1) return { allowed: true, slotMs, window };
-  return { allowed: false, reason: "HOURLY_LIMIT", retryAtMs: nextHourStartMs(slotMs), window };
+  return { allowed: false, reason: "HOURLY_LIMIT", retryAtMs: nextHourStartMs(now), window };
 };

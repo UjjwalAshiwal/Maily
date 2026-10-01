@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 import { emailQueue } from "../queue/email.queue.js";
 import { removeEmailFromIndex, syncEmailToIndex, EMAIL_STATUSES } from "./search.service.js";
@@ -15,9 +16,10 @@ const scheduleSchema = z.object({
     .string()
     .datetime()
     .refine((s) => new Date(s).getTime() > Date.now(), "scheduledAt must be in the future"),
+  idempotencyKey: z.string().min(8).max(128).optional(),
 });
 
-const ADD_TIMEOUT_MS = Number(process.env.QUEUE_ADD_TIMEOUT_MS ?? 10_000);
+const ADD_TIMEOUT_MS = env.QUEUE_ADD_TIMEOUT_MS;
 
 const addWithTimeout = (
   data: { emailId: string },
@@ -40,17 +42,26 @@ export const scheduleEmail = async (input: unknown, authUserId: string) => {
   if (!sender || sender.userId !== authUserId)
     throw Object.assign(new Error("sender not found"), { status: 404 });
 
-  const email = await prisma.email.create({
-    data: {
-      senderId: data.senderId,
-      recipient: data.recipient,
-      subject: data.subject,
-      body: data.body,
-      scheduledAt: new Date(data.scheduledAt),
-      // Unique per email. Request-level dedupe arrives in a later phase.
-      idempotencyKey: randomUUID(),
-    },
-  });
+  let email;
+  try {
+    email = await prisma.email.create({
+      data: {
+        senderId: data.senderId,
+        recipient: data.recipient,
+        subject: data.subject,
+        body: data.body,
+        scheduledAt: new Date(data.scheduledAt),
+        idempotencyKey: data.idempotencyKey ?? randomUUID(),
+      },
+    });
+  } catch (e: any) {
+    // ponytail: client-supplied key replay returns the original row
+    if (e?.code === "P2002" && data.idempotencyKey) {
+      const existing = await prisma.email.findUnique({ where: { idempotencyKey: data.idempotencyKey } });
+      if (existing) return { emailId: existing.id, jobId: existing.bullJobId ?? "", status: existing.status };
+    }
+    throw e;
+  }
 
   try {
     const delay = Math.max(0, email.scheduledAt.getTime() - Date.now());
@@ -256,12 +267,17 @@ const createSenderSchema = z.object({ email: z.string().email() });
 
 // Sender creation: email address only, always owned by the caller. No SMTP
 // credentials — sending still uses the shared Ethereal configuration.
-export const createSender = (authUserId: string, input: unknown) => {
+export const createSender = async (authUserId: string, input: unknown) => {
   const data = createSenderSchema.parse(input);
-  return prisma.sender.create({
-    data: { userId: authUserId, email: data.email },
-    select: { id: true, email: true },
-  });
+  try {
+    return await prisma.sender.create({
+      data: { userId: authUserId, email: data.email },
+      select: { id: true, email: true },
+    });
+  } catch (e: any) {
+    if (e?.code === "P2002") throw Object.assign(new Error("sender already exists"), { status: 409 });
+    throw e;
+  }
 };
 
 // Sender deletion is a soft delete: the row (and every email, job, and

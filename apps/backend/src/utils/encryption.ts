@@ -18,7 +18,9 @@ export const encrypt = (plaintext: string): string => {
 };
 
 export const decrypt = (packed: string): string => {
-  const [ivHex, tagHex, dataHex] = packed.split(":");
+  const parts = packed.split(":");
+  if (parts.length !== 3) throw new Error("malformed ciphertext");
+  const [ivHex, tagHex, dataHex] = parts;
   if (!ivHex || !tagHex || !dataHex) throw new Error("malformed ciphertext");
   const decipher = createDecipheriv("aes-256-gcm", key(), Buffer.from(ivHex, "hex"));
   decipher.setAuthTag(Buffer.from(tagHex, "hex"));

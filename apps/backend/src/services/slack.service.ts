@@ -22,7 +22,7 @@ interface SlackOAuthRecord {
 }
 
 const oauthClient = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 3 });
-oauthClient.on("error", () => {});
+oauthClient.on("error", (err) => logger.error({ err }, "slack oauth redis error"));
 const oauthKey = (state: string) => `slack:oauth:${state}`;
 
 export const newSlackOAuthState = async (
@@ -38,9 +38,9 @@ export const newSlackOAuthState = async (
 export const consumeSlackOAuthState = async (
   state: string
 ): Promise<SlackOAuthRecord | null> => {
-  const found = await oauthClient.get(oauthKey(state));
+  if (!/^[A-Za-z0-9-]{8,128}$/.test(state)) return null;
+  const found = await oauthClient.getdel(oauthKey(state));
   if (!found) return null;
-  await oauthClient.del(oauthKey(state));
   try {
     const record = JSON.parse(found) as Partial<SlackOAuthRecord>;
     if (typeof record.userId !== "string" || typeof record.codeVerifier !== "string")

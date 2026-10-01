@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+const backend = (process.env.NEXT_PUBLIC_API ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
 export default {
   // Preserve the /api prefix: the backend mounts everything under /api/*.
   // (The previous config forwarded to /:path*, which 404'd every call.)
@@ -6,7 +7,7 @@ export default {
     return [
       {
         source: "/api/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API ?? "http://localhost:4000"}/api/:path*`,
+        destination: `${backend}/api/:path*`,
       },
     ];
   },

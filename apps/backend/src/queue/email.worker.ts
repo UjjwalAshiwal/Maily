@@ -1,4 +1,4 @@
-import { Worker, DelayedError } from "bullmq";
+import { Worker, DelayedError, UnrecoverableError } from "bullmq";
 import { env } from "../config/env.js";
 import { logger } from "../utils/logger.js";
 import { prisma } from "../db/prisma.js";
@@ -72,7 +72,11 @@ export const emailWorker = new Worker(
           emailId,
           jobId: job.id,
         });
-        await job.moveToDelayed(decision.retryAtMs);
+        try {
+          await job.moveToDelayed(decision.retryAtMs);
+        } catch {
+          await job.moveToDelayed(Date.now() + 60_000);
+        }
         logger.info(
           {
             emailId,
@@ -94,7 +98,11 @@ export const emailWorker = new Worker(
       await setEmailSlot(email.id, slotMs);
     }
     if (slotMs > Date.now()) {
-      await job.moveToDelayed(slotMs);
+      try {
+        await job.moveToDelayed(slotMs);
+      } catch {
+        await job.moveToDelayed(Date.now() + 60_000);
+      }
       logger.info(
         {
           emailId,
@@ -109,7 +117,18 @@ export const emailWorker = new Worker(
       throw new DelayedError();
     }
 
-    await prisma.email.update({ where: { id: emailId }, data: { status: "PROCESSING" } });
+    // Atomic claim: only the worker that flips SCHEDULED->PROCESSING sends.
+    const claimed = await prisma.email.updateMany({
+      where: { id: emailId, status: "SCHEDULED" },
+      data: { status: "PROCESSING", attempts: { increment: 1 } },
+    });
+    if (claimed.count === 0 && email.status === "SCHEDULED") {
+      logger.info({ emailId, jobId: job.id }, "lost SCHEDULED claim race, skipping");
+      return;
+    }
+    if (email.status === "PROCESSING") {
+      await prisma.email.update({ where: { id: emailId }, data: { attempts: { increment: 1 } } }).catch(() => {});
+    }
     // Best-effort index sync. Never throws: ES failure must not resend email.
     await syncEmailToIndex(emailId);
 
@@ -127,6 +146,10 @@ export const emailWorker = new Worker(
       await syncEmailToIndex(emailId);
       logger.info({ emailId, recipient: email.recipient, jobId: job.id, previewUrl }, "email sent");
     } catch (err: any) {
+      const msg: string = err?.message ?? String(err);
+      // ponytail: fail fast on config/auth errors, retry only on transient SMTP
+      if (/auth|credential|certificate|ENCRYPTION_KEY|configuration/i.test(msg))
+        throw new UnrecoverableError(msg);
       const maxAttempts = job.opts.attempts ?? 1;
       if (job.attemptsMade + 1 >= maxAttempts) {
         await prisma.email

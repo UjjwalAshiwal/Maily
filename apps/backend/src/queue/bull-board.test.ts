@@ -26,7 +26,7 @@ describe("bull-board", () => {
   it("adapter wraps that same queue instance", () => {
     assert.equal(bullBoardAdapter.getName(), emailQueue.name);
   });
-  it("dashboard is enabled by default (dev-only, documented)", () => {
-    assert.equal(env.BULL_BOARD_ENABLED, true);
+  it("dashboard is disabled by default (closed unless explicitly enabled)", () => {
+    assert.equal(env.BULL_BOARD_ENABLED, false);
   });
 });

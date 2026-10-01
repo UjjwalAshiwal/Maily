@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
+    "build": "prisma generate && tsc",
+    "start": "prisma migrate deploy && node dist/server.js",
     "test": "tsx --test --test-force-exit \"src/**/*.test.ts\"",
     "search:index": "tsx src/scripts/search-index.ts"
   },
