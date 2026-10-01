@@ -111,6 +111,12 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
         <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</p>
       )}
 
+      {email.status === "FAILED" && (
+        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          Send failed{typeof email.attempts === "number" ? ` after ${email.attempts} attempt${email.attempts === 1 ? "" : "s"}` : ""}: {email.errorMessage || "unknown error — check /ready and the Bull Board failed job."}
+        </p>
+      )}
+
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-sm font-semibold text-white">

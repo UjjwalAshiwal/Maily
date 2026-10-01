@@ -109,6 +109,8 @@ const loadOwnedEmail = async (authUserId: string, emailId: string) => {
 };
 
 // Single row→list-item mapper shared by the list and detail reads.
+// errorMessage/failedAt/attempts are included so a FAILED row explains
+// itself (SMTP reason) without needing Render logs or Bull Board access.
 const toListItem = (e: {
   id: string;
   senderId: string;
@@ -119,6 +121,9 @@ const toListItem = (e: {
   status: string;
   scheduledAt: Date;
   sentAt: Date | null;
+  errorMessage: string | null;
+  failedAt: Date | null;
+  attempts: number;
 }) => ({
   id: e.id,
   senderId: e.senderId,
@@ -129,6 +134,9 @@ const toListItem = (e: {
   status: e.status,
   scheduledAt: e.scheduledAt.toISOString(),
   sentAt: e.sentAt?.toISOString() ?? null,
+  errorMessage: e.errorMessage,
+  failedAt: e.failedAt?.toISOString() ?? null,
+  attempts: e.attempts,
 });
 
 // Single email for the detail view. Same ownership rule as everything else.
@@ -320,6 +328,9 @@ export const listEmails = async (
         status: true,
         scheduledAt: true,
         sentAt: true,
+        errorMessage: true,
+        failedAt: true,
+        attempts: true,
         sender: { select: { email: true } },
       },
       orderBy: { scheduledAt: "desc" },

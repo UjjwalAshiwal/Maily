@@ -20,6 +20,9 @@ export interface EmailItem {
   status: string;
   scheduledAt: string;
   sentAt: string | null;
+  errorMessage?: string | null;
+  failedAt?: string | null;
+  attempts?: number;
 }
 
 export interface EmailListResponse {

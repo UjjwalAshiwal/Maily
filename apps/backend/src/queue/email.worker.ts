@@ -137,8 +137,21 @@ export const emailWorker = new Worker(
     } catch (err: any) {
       const msg: string = err?.message ?? String(err);
       // Config/auth errors never succeed on retry; transient SMTP does.
-      if (/auth|credential|certificate|ENCRYPTION_KEY|configuration/i.test(msg))
+      // Fail the row here: UnrecoverableError skips all remaining retries,
+      // so without this write the email would sit in PROCESSING forever
+      // next to an already-failed job (exactly the "failed job, no outcome"
+      // state seen on Render when SMTP creds are missing there).
+      if (/auth|credential|certificate|ENCRYPTION_KEY|configuration/i.test(msg)) {
+        await prisma.email
+          .update({
+            where: { id: emailId },
+            data: { status: "FAILED", failedAt: new Date(), errorMessage: msg },
+          })
+          .catch(() => {});
+        await clearEmailSlot(emailId).catch(() => {});
+        await syncEmailToIndex(emailId);
         throw new UnrecoverableError(msg);
+      }
       const maxAttempts = job.opts.attempts ?? 1;
       if (job.attemptsMade + 1 >= maxAttempts) {
         await prisma.email
