@@ -20,6 +20,14 @@ cd ../frontend && npm i && npm run dev   # http://localhost:3000
 
 No credentials means sending fails and BullMQ retries like any other error.
 
+> Render free tier blocks outbound SMTP (ports 25/465/587), so Ethereal
+> always times out there (`Connection timeout` in the worker logs). Either
+> upgrade the Render service to a paid instance, or set `RESEND_API_KEY`
+> (+ optional `RESEND_FROM`) to send over HTTPS instead — the worker picks
+> the HTTPS path automatically when the key is present. Without a verified
+> Resend domain, use `RESEND_FROM=onboarding@resend.dev` and send only to
+> your own account email.
+
 ## How scheduling works
 
 - You hit `POST /api/emails/schedule`. The backend saves the email in Postgres as `SCHEDULED` and adds a BullMQ delayed job (`delay = scheduledAt - now`, id `email-<id>`).

@@ -141,7 +141,7 @@ export const emailWorker = new Worker(
       // so without this write the email would sit in PROCESSING forever
       // next to an already-failed job (exactly the "failed job, no outcome"
       // state seen on Render when SMTP creds are missing there).
-      if (/auth|credential|certificate|ENCRYPTION_KEY|configuration/i.test(msg)) {
+      if (/auth|credential|certificate|ENCRYPTION_KEY|configuration|api key|forbidden|validation/i.test(msg)) {
         await prisma.email
           .update({
             where: { id: emailId },

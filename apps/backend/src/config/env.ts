@@ -32,6 +32,10 @@ export const env = {
   ETHEREAL_USER: process.env.ETHEREAL_USER ?? "",
   ETHEREAL_PASSWORD: process.env.ETHEREAL_PASSWORD ?? "",
   ETHEREAL_FROM: process.env.ETHEREAL_FROM ?? "reachinbox@test.local",
+  // HTTPS sending for hosts that block outbound SMTP (e.g. Render free
+  // tier blocks 25/465/587). Empty = use Ethereal SMTP above.
+  RESEND_API_KEY: process.env.RESEND_API_KEY ?? "",
+  RESEND_FROM: process.env.RESEND_FROM ?? "onboarding@resend.dev",
   ELASTICSEARCH_URL: process.env.ELASTICSEARCH_URL ?? "http://localhost:9200",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? "",
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? "",
