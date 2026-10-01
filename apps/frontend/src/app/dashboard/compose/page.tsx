@@ -17,6 +17,7 @@ import { computeSchedule, defaultStartTime, EMAIL_RE, formatDateTime, toLocalInp
 import { parseCsvRecipients } from "../../../lib/csv";
 import { notifyEmailsChanged } from "../../../lib/events";
 import { Button, Card, Input, Select, Spinner } from "../../../components/ui";
+import { toast } from "../../../components/toast";
 import { IconBack, IconCheck, IconClock, IconUpload, IconX } from "../../../components/icons";
 import { useEffect } from "react";
 import type { Sender } from "../../../types/index";
@@ -173,12 +174,14 @@ function ComposeInner() {
     notifyEmailsChanged();
     if (problems.length === 0) {
       setSuccess(`${done} email${done === 1 ? "" : "s"} scheduled.`);
+      toast(`${done} email${done === 1 ? "" : "s"} scheduled.`);
       setChips([]);
       setSubject("");
       setBody("");
     } else {
       setFailed(problems);
       setFormError(`${problems.length} of ${chips.length} failed to schedule.`);
+      toast(`${problems.length} of ${chips.length} failed to schedule.`);
     }
   };
 

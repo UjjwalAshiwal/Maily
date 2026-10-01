@@ -121,9 +121,46 @@ export const searchEmails = async (input: {
   const page = Math.max(1, Number(input.page) || 1);
   const limit = Math.min(MAX_LIMIT, Math.max(1, Number(input.limit) || DEFAULT_LIMIT));
 
-  const res = await searchEmailDocuments({ q, status, senderIds, from: (page - 1) * limit, size: limit });
-  const hits = res.hits.hits.map((h) => h._source as EmailDocument);
-  const total =
-    typeof res.hits.total === "number" ? res.hits.total : (res.hits.total?.value ?? hits.length);
-  return toSearchResponse(hits, total);
+  try {
+    const res = await searchEmailDocuments({ q, status, senderIds, from: (page - 1) * limit, size: limit });
+    const hits = res.hits.hits.map((h) => h._source as EmailDocument);
+    const total =
+      typeof res.hits.total === "number" ? res.hits.total : (res.hits.total?.value ?? hits.length);
+    return toSearchResponse(hits, total);
+  } catch (err) {
+    // ponytail: ES down (e.g. Render with no managed ES) falls back to Postgres
+    // ILIKE instead of 500ing search.
+    logger.error({ err }, "elasticsearch search failed, falling back to postgres");
+    const where: any = {
+      ...(status ? { status } : {}),
+      ...(senderIds !== undefined ? { senderId: { in: senderIds } } : {}),
+      OR: [
+        { recipient: { contains: q, mode: "insensitive" } },
+        { subject: { contains: q, mode: "insensitive" } },
+        { body: { contains: q, mode: "insensitive" } },
+      ],
+    };
+    const [rows, total] = await Promise.all([
+      prisma.email.findMany({
+        where,
+        orderBy: { scheduledAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.email.count({ where }),
+    ]);
+    return {
+      results: rows.map((e) => ({
+        id: e.id,
+        senderId: e.senderId,
+        recipient: e.recipient,
+        subject: e.subject,
+        body: e.body,
+        status: e.status,
+        scheduledAt: e.scheduledAt.toISOString(),
+        sentAt: e.sentAt?.toISOString() ?? null,
+      })),
+      total,
+    };
+  }
 };

@@ -13,7 +13,7 @@
   - 200 → `{ senders: [{ id, email }] }` — the caller's live senders, the only valid `senderId` values for scheduling.
 - `GET /api/emails/search?q=john&status=SENT&page=1&limit=20`
   - 200 → `{ results: [{ id, senderId, recipient, subject, status, scheduledAt, sentAt }], total }`
-  - Empty/missing `q` → empty result (no match-all). Max `limit` 100. 500 while Elasticsearch is down.
+  - Empty/missing `q` → empty result (no match-all). Max `limit` 100. Elasticsearch first, Postgres ILIKE fallback when ES is down (never 500).
 - Auth (all `/api/emails` routes require `Authorization: Bearer <token>`):
   - `GET /api/auth/google` → 302 to Google (starts OAuth, state in Redis).
   - `GET /api/auth/google/callback?code&state` → 302 to `{FRONTEND_URL}/auth/callback?token=…` (or `/login?error=oauth_failed`).

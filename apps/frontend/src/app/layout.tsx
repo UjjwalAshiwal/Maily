@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "../lib/auth";
+import { ToastHost } from "../components/toast";
 
 export const metadata: Metadata = {
   title: "Maily — Email Scheduler",
@@ -12,6 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <AuthProvider>{children}</AuthProvider>
+        <ToastHost />
       </body>
     </html>
   );

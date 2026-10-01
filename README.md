@@ -7,7 +7,7 @@
 ```bash
 cp .env.example .env
 docker compose up -d  # postgres, redis, elasticsearch
-cd apps/backend && npm i && npx prisma migrate dev && npm run dev
+cd apps/backend && npm i && npx prisma migrate deploy && npm run dev
 curl localhost:4000/health  # expect {"ok": true, ...}
 cd ../frontend && npm i && npm run dev  # http://localhost:3000
 ```
@@ -154,8 +154,9 @@ unchanged.
 ## Slack (OAuth + PKCE + hourly-limit notifications)
 
 - Create a Slack app at https://api.slack.com/apps with **incoming
-  webhooks** enabled; set `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`,
+  webhooks** enabled; set `SLACK_CLIENT_ID`,
   `SLACK_REDIRECT_URI`, and `ENCRYPTION_KEY` (`openssl rand -hex 32`).
+  No client secret is used (PKCE flow).
 - `incoming-webhook` is a bot-only scope, so localhost needs an https
   tunnel for development (bot scopes are rejected on non-web redirects):
   run `cloudflared tunnel --url http://localhost:4000` and set
@@ -195,8 +196,8 @@ PROCESSING — that is accepted, never papered over with fake transactions.
   match-all). Max `limit` 100. No ES internals leak into the response.
 - **When ES is down:** scheduling, BullMQ, and sending keep working;
   indexing failures are logged with `emailId`/`operation` and swallowed —
-  the worker never resends because the index failed. Search requests 500
-  until ES returns.
+  the worker never resends because the index failed. Search falls back to
+  Postgres `ILIKE` (same shape), never 500s.
 
 ## Frontend (Next.js mail client)
 
@@ -232,9 +233,9 @@ completed / failed — the normal BullMQ operational view).
 
 - Observes the same queue instance: same name, same connection, same
   semantics. Nothing about scheduling, retries, or sending changed.
-- **Security: development-only, no login.** Enabled by default via
-  `BULL_BOARD_ENABLED=true`; set `BULL_BOARD_ENABLED=false` in production
-  (route returns 404) or put `/admin/queues` behind proxy auth.
+- **Security: development-only, no login.** Disabled by default
+  (`BULL_BOARD_ENABLED` must be `"true"` to mount); otherwise the route
+  returns 404. In production put `/admin/queues` behind proxy auth.
 
 ## Testing
 
@@ -253,7 +254,8 @@ npm run search:index               # (in apps/backend) reindex PG → ES, report
 - ES is eventually consistent with PG (short SENT skew accepted); scheduling/sending never depend on it.
 - Per-compose delay/hourly are client-side schedule computation, not server overrides; the server policy stays single and Redis-backed.
 - Soft-deleted senders keep their emails visible; scheduling with one 404s.
-- Error bodies may include Prisma detail when PG itself is down (non-operating mode only).
+- Error bodies are generic (`internal error` on 500, never Prisma/SMTP internals); `ZodError` maps to 400.
+- 1000+ emails at once: each reserves one slot/counters atomically, over-limit jobs spill to the next hour via the same delayed job (no drops, order best-effort).
 - `/admin/queues` has no login — disable in production or proxy-protect it.
 - Tunnel-based Slack redirect URLs change per tunnel restart (production uses a stable https URL).
 

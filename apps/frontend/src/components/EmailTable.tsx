@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { formatDateTime } from "../lib/compose";
 import type { EmailItem } from "../types/index";
-import { statusRing } from "./ui";
+import { StatusBadge, statusRing } from "./ui";
 import { IconStar } from "./icons";
 
 // Figma mail-client rows: To · time pill · subject + body preview · star.
@@ -56,6 +56,7 @@ export function EmailTable({
         >
           <span className="w-28 shrink-0 truncate text-[13px] text-zinc-500">To: {e.recipient}</span>
           <TimePill email={e} />
+          <StatusBadge status={e.status} />
           <span className="min-w-0 flex-1 truncate text-[13px]">
             <span className="font-semibold text-zinc-900">{e.subject}</span>
             <span className="text-zinc-500"> · {previewOf(e.body)}</span>
